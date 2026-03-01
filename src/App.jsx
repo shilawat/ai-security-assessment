@@ -155,7 +155,6 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#0A0D14", color: "#E2E8F0", fontFamily: "'DM Mono', 'Courier New', monospace", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
         <div style={{ maxWidth: 680, width: "100%" }}>
-          <div style={{ marginBottom: 8, fontSize: 11, letterSpacing: 4, color: "#64748B", textTransform: "uppercase" }}>Vanta</div>
           <h1 style={{ fontSize: 38, fontWeight: 700, color: "#F8FAFC", margin: "0 0 8px", lineHeight: 1.1, fontFamily: "'DM Sans', sans-serif" }}>AI Security Assessment</h1>
           <p style={{ color: "#64748B", fontSize: 15, marginBottom: 48, lineHeight: 1.6 }}>
             Aligned with NIST AI RMF, ISO 42001, and the EU AI Act. Select your organization profile to begin.
@@ -440,3 +439,4 @@ export default function App() {
     </div>
   );
 }
+
