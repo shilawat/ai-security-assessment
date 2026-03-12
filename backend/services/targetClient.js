@@ -7,7 +7,7 @@ const axios = require('axios');
  * Docs: https://docs.sarvam.ai
  */
 
-const SARVAM_BASE_URL = process.env.SARVAM_BASE_URL || 'https://api.sarvam.ai/v1';
+const SARVAM_BASE_URL = process.env.SARVAM_BASE_URL || 'https://api.sarvam.ai';
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY;
 
 // Available Sarvam models
@@ -57,7 +57,7 @@ async function queryTarget(prompt, model = SARVAM_MODELS.SAARIKA, systemPrompt =
       requestBody,
       {
         headers: {
-          'Authorization': `Bearer ${SARVAM_API_KEY}`,
+          'api-subscription-key': SARVAM_API_KEY,
           'Content-Type': 'application/json'
         },
         timeout: 30000
