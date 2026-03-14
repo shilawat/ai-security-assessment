@@ -9,7 +9,18 @@ const sessionRoutes = require('./routes/session');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,          // e.g. https://your-site.netlify.app
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (curl, Postman, same-origin)
+    if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  }
+}));
 app.use(express.json());
 
 // Routes
