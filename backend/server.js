@@ -5,6 +5,8 @@ const cors = require('cors');
 const attackRoutes = require('./routes/attack');
 const judgeRoutes = require('./routes/judge');
 const sessionRoutes = require('./routes/session');
+const authRoutes = require('./routes/auth');
+const requireKey = require('./middleware/requireKey');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,10 +25,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
-app.use('/api/attack', attackRoutes);
-app.use('/api/judge', judgeRoutes);
-app.use('/api/session', sessionRoutes);
+// Auth (unprotected)
+app.use('/api/auth', authRoutes);
+
+// Protected routes — require a valid access key
+app.use('/api/attack', requireKey, attackRoutes);
+app.use('/api/judge', requireKey, judgeRoutes);
+app.use('/api/session', requireKey, sessionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

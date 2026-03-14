@@ -1,7 +1,12 @@
 const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
+let _accessKey = '';
+export function setAccessKey(key) { _accessKey = key; }
+
 async function request(method, path, body = null) {
-  const options = { method, headers: { 'Content-Type': 'application/json' } };
+  const headers = { 'Content-Type': 'application/json' };
+  if (_accessKey) headers['x-access-key'] = _accessKey;
+  const options = { method, headers };
   if (body) options.body = JSON.stringify(body);
   const res = await fetch(`${BASE_URL}${path}`, options);
   const data = await res.json();

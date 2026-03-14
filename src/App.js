@@ -3,12 +3,26 @@ import './App.css';
 import AttackConfig from './components/AttackConfig';
 import ResultsViewer from './components/ResultsViewer';
 import LogsViewer from './components/LogsViewer';
-import { api } from './services/api';
+import KeyGate from './components/KeyGate';
+import { api, setAccessKey } from './services/api';
 
 const TABS = ['attack', 'logs'];
 
+function getStoredKey() { return localStorage.getItem('access_key') || ''; }
+
 export default function App() {
   const [tab, setTab] = useState('attack');
+  const [accessKey, setAccessKeyState] = useState(getStoredKey);
+
+  const handleUnlock = (key) => {
+    setAccessKey(key);
+    setAccessKeyState(key);
+  };
+
+  // Initialise the api module with any key already in localStorage
+  if (accessKey) setAccessKey(accessKey);
+
+  if (!accessKey) return <KeyGate onUnlock={handleUnlock} />;
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState(null);
   const [singleResult, setSingleResult] = useState(null);
@@ -68,6 +82,11 @@ export default function App() {
               {t === 'attack' ? '⚔️ Attack' : '📋 Logs'}
             </button>
           ))}
+          <button className="nav-btn" style={{ marginLeft: 16, opacity: 0.6 }} onClick={() => {
+            localStorage.removeItem('access_key');
+            setAccessKey('');
+            setAccessKeyState('');
+          }}>🔒 Sign out</button>
         </nav>
       </header>
 
