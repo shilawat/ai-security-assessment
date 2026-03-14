@@ -6,15 +6,23 @@ const path = require('path');
 
 const { getStrategies, getStrategyById, getCategories } = require('../services/attackStrategies');
 const { generateAttackPrompt, runPAIRLoop } = require('../services/attackEngine');
-const { queryTarget, queryTargetText } = require('../services/targetClient');
 const { judgeResponse, generateSessionSummary } = require('../services/evaluator');
+const { getTargets, getTargetQuery } = require('../services/targetRegistry');
 
 const LOGS_DIR = path.join(__dirname, '../logs');
 if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
 
 /**
+ * GET /api/attack/targets
+ * Returns all available target models with their configured status.
+ */
+router.get('/targets', (req, res) => {
+  res.json({ targets: getTargets() });
+});
+
+/**
  * GET /api/attack/strategies
- * Returns the full attack strategy library.
+ * Returns the attack strategy library, filterable by category/severity.
  */
 router.get('/strategies', (req, res) => {
   const { category, severity } = req.query;
@@ -26,48 +34,41 @@ router.get('/strategies', (req, res) => {
 
 /**
  * POST /api/attack/single
- * Runs a single attack (one strategy, one target query, one judgment).
+ * Runs a single attack against a chosen target.
  *
- * Body:
- *   { strategyId, goal, refine?, systemPrompt? }
+ * Body: { strategyId, goal, targetId?, refine?, systemPrompt?, customTarget? }
  */
 router.post('/single', async (req, res) => {
-  const { strategyId, goal, refine = false, systemPrompt = null } = req.body;
+  const {
+    strategyId, goal,
+    targetId = 'sarvam-m',
+    refine = false,
+    systemPrompt = null,
+    customTarget = {}
+  } = req.body;
 
   if (!strategyId || !goal) {
     return res.status(400).json({ error: 'strategyId and goal are required.' });
   }
-
   const strategy = getStrategyById(strategyId);
-  if (!strategy) {
-    return res.status(404).json({ error: `Strategy "${strategyId}" not found.` });
-  }
+  if (!strategy) return res.status(404).json({ error: `Strategy "${strategyId}" not found.` });
 
   try {
-    // 1. Generate attack prompt
+    const queryFn = getTargetQuery(targetId, customTarget);
     const { prompt, reasoning } = await generateAttackPrompt(strategy, goal, refine);
-
-    // 2. Query target
-    const targetResult = await queryTarget(prompt, undefined, systemPrompt);
-
-    // 3. Judge
+    const targetResult = await queryFn(prompt, systemPrompt, []);
     const judgment = await judgeResponse(goal, targetResult.response, prompt);
 
     const result = {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
+      target: targetId,
       strategy: { id: strategy.id, name: strategy.name, category: strategy.category, severity: strategy.severity },
-      goal,
-      attackPrompt: prompt,
-      attackReasoning: reasoning,
-      targetResponse: targetResult.response,
-      usage: targetResult.usage,
-      judgment
+      goal, attackPrompt: prompt, attackReasoning: reasoning,
+      targetResponse: targetResult.response, usage: targetResult.usage, judgment
     };
 
-    // Log to file
     appendToLog('single', result);
-
     res.json(result);
   } catch (err) {
     console.error('Single attack error:', err);
@@ -77,144 +78,113 @@ router.post('/single', async (req, res) => {
 
 /**
  * POST /api/attack/session
- * Runs a full red team session: multiple strategies against a goal.
+ * Runs multiple strategies against a chosen target.
  *
- * Body:
- *   { goal, strategyIds?, categories?, usePAIR?, maxIterations?, systemPrompt? }
+ * Body: { goal, targetId?, strategyIds?, testType?, usePAIR?, maxIterations?, systemPrompt?, customTarget? }
  */
 router.post('/session', async (req, res) => {
   const {
     goal,
+    targetId = 'sarvam-m',
     strategyIds,
-    categories,
+    testType,           // maps to category filter
     usePAIR = false,
     maxIterations = 3,
-    systemPrompt = null
+    systemPrompt = null,
+    customTarget = {}
   } = req.body;
 
   if (!goal) return res.status(400).json({ error: 'goal is required.' });
 
-  // Determine which strategies to run
+  // Resolve strategies: explicit ids > testType category > all
   let strategies;
   if (strategyIds && strategyIds.length > 0) {
     strategies = strategyIds.map(id => getStrategyById(id)).filter(Boolean);
-  } else if (categories && categories.length > 0) {
-    strategies = getStrategies({ category: categories[0] });
+  } else if (testType && testType !== 'all') {
+    strategies = getStrategies({ category: testType });
   } else {
     strategies = getStrategies();
   }
 
+  const queryFn = getTargetQuery(targetId, customTarget);
   const sessionId = uuidv4();
   const results = [];
 
   for (const strategy of strategies) {
     try {
       if (usePAIR) {
-        // PAIR iterative loop
         const iterations = await runPAIRLoop({
-          strategy,
-          goal,
-          queryTarget: (p) => queryTargetText(p),
+          strategy, goal,
+          queryTarget: (p) => queryFn(p, systemPrompt, []).then(r => r.response),
           judgeResponse: (g, r) => judgeResponse(g, r),
           maxIterations
         });
-
-        const bestIteration = iterations.reduce((best, cur) =>
-          cur.judgment.score > best.judgment.score ? cur : best, iterations[0]);
-
+        const best = iterations.reduce((b, c) => c.judgment.score > b.judgment.score ? c : b, iterations[0]);
         results.push({
-          id: uuidv4(),
-          sessionId,
+          id: uuidv4(), sessionId, target: targetId,
           strategy: { id: strategy.id, name: strategy.name, category: strategy.category, severity: strategy.severity },
-          goal,
-          mode: 'PAIR',
-          iterations,
-          bestResult: bestIteration,
-          judgment: bestIteration.judgment
+          goal, mode: 'PAIR', iterations, bestResult: best, judgment: best.judgment
         });
       } else {
-        // Single-pass attack
         const { prompt, reasoning } = await generateAttackPrompt(strategy, goal, false);
-        const targetResult = await queryTarget(prompt, undefined, systemPrompt);
+        const targetResult = await queryFn(prompt, systemPrompt, []);
         const judgment = await judgeResponse(goal, targetResult.response, prompt);
-
         results.push({
-          id: uuidv4(),
-          sessionId,
+          id: uuidv4(), sessionId, target: targetId,
           strategy: { id: strategy.id, name: strategy.name, category: strategy.category, severity: strategy.severity },
-          goal,
-          mode: 'SINGLE',
-          attackPrompt: prompt,
-          attackReasoning: reasoning,
-          targetResponse: targetResult.response,
-          usage: targetResult.usage,
-          judgment
+          goal, mode: 'SINGLE', attackPrompt: prompt, attackReasoning: reasoning,
+          targetResponse: targetResult.response, usage: targetResult.usage, judgment
         });
       }
     } catch (err) {
       results.push({
-        id: uuidv4(),
-        sessionId,
+        id: uuidv4(), sessionId, target: targetId,
         strategy: { id: strategy.id, name: strategy.name, category: strategy.category },
-        goal,
-        error: err.message,
+        goal, error: err.message,
         judgment: { score: 0, label: 'ERROR', reason: err.message, categories: [] }
       });
     }
   }
 
   const summary = await generateSessionSummary(results);
-  const session = { sessionId, goal, timestamp: new Date().toISOString(), summary, results };
-
+  const session = { sessionId, goal, target: targetId, testType: testType || 'all', timestamp: new Date().toISOString(), summary, results };
   appendToLog('session', session);
-
   res.json(session);
 });
 
 /**
  * POST /api/attack/escalation
- * Runs a multi-turn crescendo escalation attack.
+ * Multi-turn crescendo attack against a chosen target.
  *
- * Body:
- *   { turns: [{ role, content }], goal }
+ * Body: { turns, goal, targetId?, customTarget? }
  */
 router.post('/escalation', async (req, res) => {
-  const { turns, goal } = req.body;
-
+  const { turns, goal, targetId = 'sarvam-m', customTarget = {} } = req.body;
   if (!turns || !Array.isArray(turns) || turns.length === 0) {
     return res.status(400).json({ error: 'turns array is required.' });
   }
 
   try {
+    const queryFn = getTargetQuery(targetId, customTarget);
     const history = [];
     const results = [];
 
     for (const turn of turns) {
-      // Send each turn to the target accumulating conversation history
-      const targetResult = await queryTarget(turn.content, undefined, null, history);
+      const targetResult = await queryFn(turn.content, null, history);
       const judgment = await judgeResponse(goal, targetResult.response, turn.content);
-
       history.push({ role: 'user', content: turn.content });
       history.push({ role: 'assistant', content: targetResult.response });
-
       results.push({
         turnLabel: turn.label || `Turn ${results.length + 1}`,
-        prompt: turn.content,
-        response: targetResult.response,
-        judgment
+        prompt: turn.content, response: targetResult.response, judgment
       });
     }
 
-    const finalJudgment = results[results.length - 1].judgment;
     const session = {
-      id: uuidv4(),
-      type: 'escalation',
-      goal,
+      id: uuidv4(), type: 'escalation', goal, target: targetId,
       timestamp: new Date().toISOString(),
-      turns: results,
-      finalJudgment
+      turns: results, finalJudgment: results[results.length - 1].judgment
     };
-
     appendToLog('escalation', session);
     res.json(session);
   } catch (err) {
