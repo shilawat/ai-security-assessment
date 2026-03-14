@@ -4,23 +4,64 @@ import { api } from '../services/api';
 const SEVERITY_COLORS = { low: '#22c55e', medium: '#f59e0b', high: '#ef4444', critical: '#7c3aed' };
 const CATEGORY_ICONS = { jailbreak: '🔓', injection: '💉', extraction: '🔍', bias: '⚖️', escalation: '📈', encoding: '🔢' };
 
-// Hardcoded targets — always visible and selectable regardless of backend config
-const AVAILABLE_TARGETS = [
-  { id: 'sarvam-m',     name: 'Sarvam AI',      provider: 'Sarvam', description: 'Multilingual model for Indian languages', color: '#f97316' },
-  { id: 'gpt-4o',       name: 'GPT-4o',          provider: 'OpenAI', description: 'OpenAI flagship model',                  color: '#22c55e' },
-  { id: 'gpt-4o-mini',  name: 'GPT-4o Mini',     provider: 'OpenAI', description: 'Faster, cheaper GPT-4o',                color: '#22c55e' },
-  { id: 'gpt-3.5-turbo',name: 'GPT-3.5 Turbo',   provider: 'OpenAI', description: 'Legacy OpenAI chat model',              color: '#22c55e' },
-  { id: 'custom',       name: 'Custom Endpoint',  provider: 'Custom', description: 'Any OpenAI-compatible API',             color: '#94a3b8' },
+// All target models grouped by provider
+const TARGET_GROUPS = [
+  {
+    provider: 'Sarvam AI',
+    models: [
+      { id: 'sarvam-m', name: 'Sarvam-M', description: 'Multilingual model for Indian languages' },
+    ]
+  },
+  {
+    provider: 'OpenAI',
+    models: [
+      { id: 'gpt-4o',        name: 'GPT-4o',        description: 'Flagship multimodal model' },
+      { id: 'gpt-4o-mini',   name: 'GPT-4o Mini',   description: 'Faster, cheaper GPT-4o' },
+      { id: 'gpt-4-turbo',   name: 'GPT-4 Turbo',   description: 'Previous flagship model' },
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Legacy chat model' },
+      { id: 'o1-mini',       name: 'o1 Mini',        description: 'Compact reasoning model' },
+      { id: 'o3-mini',       name: 'o3 Mini',        description: 'Latest reasoning model' },
+    ]
+  },
+  {
+    provider: 'Anthropic',
+    models: [
+      { id: 'claude-opus-4-6',   name: 'Claude Opus 4.6',   description: 'Most capable Claude' },
+      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', description: 'Balanced Claude model' },
+      { id: 'claude-haiku-4-5',  name: 'Claude Haiku 4.5',  description: 'Fast, affordable Claude' },
+    ]
+  },
+  {
+    provider: 'Google',
+    models: [
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Fast multimodal model' },
+      { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro',   description: 'Long context model' },
+    ]
+  },
+  {
+    provider: 'Groq (Open Source)',
+    models: [
+      { id: 'llama-3.3-70b', name: 'Llama 3.3 70B',  description: "Meta's Llama 3.3 via Groq" },
+      { id: 'mixtral-8x7b',  name: 'Mixtral 8x7B',   description: 'Mistral MoE via Groq' },
+      { id: 'gemma2-9b',     name: 'Gemma 2 9B',      description: "Google's Gemma 2 via Groq" },
+    ]
+  },
+  {
+    provider: 'Custom',
+    models: [
+      { id: 'custom', name: 'Custom Endpoint', description: 'Any OpenAI-compatible API' },
+    ]
+  },
 ];
 
 const TEST_TYPES = [
-  { id: 'all',        label: '📋 All Tests'         },
-  { id: 'jailbreak',  label: '🔓 Jailbreak'         },
-  { id: 'injection',  label: '💉 Prompt Injection'  },
-  { id: 'extraction', label: '🔍 Data Extraction'   },
-  { id: 'bias',       label: '⚖️ Bias & Fairness'   },
-  { id: 'escalation', label: '📈 Escalation'        },
-  { id: 'encoding',   label: '🔢 Encoding'          },
+  { id: 'all',        label: '📋 All Tests'        },
+  { id: 'jailbreak',  label: '🔓 Jailbreak'        },
+  { id: 'injection',  label: '💉 Prompt Injection' },
+  { id: 'extraction', label: '🔍 Data Extraction'  },
+  { id: 'bias',       label: '⚖️ Bias & Fairness'  },
+  { id: 'escalation', label: '📈 Escalation'       },
+  { id: 'encoding',   label: '🔢 Encoding'         },
 ];
 
 export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
@@ -42,6 +83,15 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
       .then(data => setStrategies(data.strategies))
       .catch(err => setError('Could not load strategies: ' + err.message));
   }, []);
+
+  // Find the label for the currently selected target
+  const selectedLabel = (() => {
+    for (const group of TARGET_GROUPS) {
+      const m = group.models.find(m => m.id === selectedTarget);
+      if (m) return `${group.provider} — ${m.name}`;
+    }
+    return 'Select a model';
+  })();
 
   const visibleStrategies = testType === 'all'
     ? strategies
@@ -72,11 +122,7 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
       if (selectedStrategies.length !== 1) { setError('Select exactly one strategy for single mode.'); return; }
       onRunAttack({ ...base, strategyId: selectedStrategies[0], refine: usePAIR });
     } else {
-      onRunSession({
-        ...base, testType,
-        strategyIds: selectedStrategies.length > 0 ? selectedStrategies : undefined,
-        usePAIR, maxIterations,
-      });
+      onRunSession({ ...base, testType, strategyIds: selectedStrategies.length > 0 ? selectedStrategies : undefined, usePAIR, maxIterations });
     }
   };
 
@@ -85,40 +131,32 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
       <h2>Attack Configuration</h2>
       {error && <div className="error-banner">{error}</div>}
 
-      {/* ── Target Model ── */}
+      {/* ── Target Model Dropdown ── */}
       <div className="form-group">
         <label>Target Model</label>
-        <div className="target-grid">
-          {AVAILABLE_TARGETS.map(t => (
-            <div
-              key={t.id}
-              className={`target-card ${selectedTarget === t.id ? 'selected' : ''}`}
-              onClick={() => setSelectedTarget(t.id)}
-            >
-              <div className="target-provider" style={{ color: t.color }}>{t.provider}</div>
-              <div className="target-name">{t.name}</div>
-              <div className="target-desc">{t.description}</div>
-            </div>
+        <select
+          className="target-select"
+          value={selectedTarget}
+          onChange={e => setSelectedTarget(e.target.value)}
+        >
+          {TARGET_GROUPS.map(group => (
+            <optgroup key={group.provider} label={group.provider}>
+              {group.models.map(m => (
+                <option key={m.id} value={m.id}>{m.name} — {m.description}</option>
+              ))}
+            </optgroup>
           ))}
-        </div>
+        </select>
+        <small className="selected-target-label">Selected: <strong>{selectedLabel}</strong></small>
 
         {selectedTarget === 'custom' && (
           <div className="custom-target-fields">
-            <input
-              placeholder="Base URL  e.g. https://api.example.com/v1"
-              value={customTarget.baseUrl}
-              onChange={e => setCustomTarget(p => ({ ...p, baseUrl: e.target.value }))}
-            />
-            <input
-              placeholder="API Key (optional)"
-              value={customTarget.apiKey}
-              onChange={e => setCustomTarget(p => ({ ...p, apiKey: e.target.value }))}
-            />
-            <input
-              placeholder="Model name  e.g. my-model"
-              value={customTarget.model}
-              onChange={e => setCustomTarget(p => ({ ...p, model: e.target.value }))}
-            />
+            <input placeholder="Base URL  e.g. https://api.example.com/v1"
+              value={customTarget.baseUrl} onChange={e => setCustomTarget(p => ({ ...p, baseUrl: e.target.value }))} />
+            <input placeholder="API Key (optional)"
+              value={customTarget.apiKey} onChange={e => setCustomTarget(p => ({ ...p, apiKey: e.target.value }))} />
+            <input placeholder="Model name  e.g. my-model"
+              value={customTarget.model} onChange={e => setCustomTarget(p => ({ ...p, model: e.target.value }))} />
           </div>
         )}
       </div>
@@ -126,12 +164,8 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
       {/* ── Red Team Goal ── */}
       <div className="form-group">
         <label>Red Team Goal</label>
-        <textarea
-          value={goal}
-          onChange={e => setGoal(e.target.value)}
-          rows={3}
-          placeholder="e.g. Get the model to provide harmful instructions"
-        />
+        <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={3}
+          placeholder="e.g. Get the model to provide harmful instructions" />
         <small>Describe the harmful behaviour you want to test the model against.</small>
       </div>
 
@@ -140,11 +174,8 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
         <label>Test Type</label>
         <div className="test-type-grid">
           {TEST_TYPES.map(t => (
-            <div
-              key={t.id}
-              className={`test-type-card ${testType === t.id ? 'selected' : ''}`}
-              onClick={() => { setTestType(t.id); setSelectedStrategies([]); }}
-            >
+            <div key={t.id} className={`test-type-card ${testType === t.id ? 'selected' : ''}`}
+              onClick={() => { setTestType(t.id); setSelectedStrategies([]); }}>
               {t.label}
             </div>
           ))}
@@ -173,7 +204,6 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
         <button className="link-btn advanced-toggle" onClick={() => setShowAdvanced(p => !p)}>
           {showAdvanced ? '▲' : '▼'} Advanced options
         </button>
-
         {showAdvanced && (
           <div className="advanced-panel">
             {mode !== 'escalation' && (
@@ -191,33 +221,21 @@ export default function AttackConfig({ onRunAttack, onRunSession, loading }) {
                 )}
               </>
             )}
-
             <label style={{ marginTop: 10, display: 'block' }}>Target System Prompt (optional)</label>
-            <textarea
-              value={systemPrompt}
-              onChange={e => setSystemPrompt(e.target.value)}
-              rows={2}
-              placeholder="e.g. You are a helpful customer service bot."
-            />
-
+            <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} rows={2}
+              placeholder="e.g. You are a helpful customer service bot." />
             {mode !== 'escalation' && visibleStrategies.length > 0 && (
               <>
                 <label style={{ marginTop: 10, display: 'block' }}>
-                  Override Strategies&nbsp;
-                  <span className="selected-count">{selectedStrategies.length} selected</span>
+                  Override Strategies <span className="selected-count">{selectedStrategies.length} selected</span>
                 </label>
                 <div className="strategy-list">
                   {visibleStrategies.map(s => (
-                    <div
-                      key={s.id}
-                      className={`strategy-card ${selectedStrategies.includes(s.id) ? 'selected' : ''}`}
-                      onClick={() => toggleStrategy(s.id)}
-                    >
+                    <div key={s.id} className={`strategy-card ${selectedStrategies.includes(s.id) ? 'selected' : ''}`}
+                      onClick={() => toggleStrategy(s.id)}>
                       <div className="strategy-header">
                         <span className="strategy-name">{s.name}</span>
-                        <span className="severity-badge" style={{ backgroundColor: SEVERITY_COLORS[s.severity] }}>
-                          {s.severity}
-                        </span>
+                        <span className="severity-badge" style={{ backgroundColor: SEVERITY_COLORS[s.severity] }}>{s.severity}</span>
                       </div>
                       <div className="strategy-meta">{CATEGORY_ICONS[s.category]} {s.category}</div>
                       <div className="strategy-desc">{s.description}</div>

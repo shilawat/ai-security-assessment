@@ -199,6 +199,16 @@ body { font-family: 'Inter', system-ui, sans-serif; background: #0f1117; color: 
 .target-desc { font-size: 11px; color: #64748b; }
 .target-badge { font-size: 10px; color: #f59e0b; margin-top: 4px; }
 
+/* Target dropdown */
+.target-select {
+  width: 100%; background: #1a1d27; border: 1px solid #2d3148; border-radius: 6px;
+  color: #e2e8f0; padding: 8px 12px; font-size: 13px; cursor: pointer; margin-bottom: 6px;
+}
+.target-select:focus { outline: none; border-color: #3b5bdb; }
+.target-select option, .target-select optgroup { background: #1a1d27; color: #e2e8f0; }
+.selected-target-label { font-size: 11px; color: #64748b; display: block; margin-top: 4px; }
+.selected-target-label strong { color: #93c5fd; }
+
 /* Custom target fields */
 .custom-target-fields { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .custom-target-fields input {
