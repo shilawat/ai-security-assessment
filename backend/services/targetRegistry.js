@@ -3,7 +3,9 @@ const OpenAI = require('openai');
 
 // ─── Generic OpenAI-compatible query ─────────────────────────────────────────
 
-async function queryOpenAICompat(prompt, systemPrompt, history, { apiKey, baseURL, model, authHeader, authPrefix }) {
+async function queryOpenAICompat(prompt, systemPrompt, history, { apiKey, baseURL, model, authHeader, authPrefix, resolvedKey }) {
+  // Allow per-request key override
+  if (resolvedKey) apiKey = resolvedKey;
   const messages = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   messages.push(...(history || []), { role: 'user', content: prompt });
@@ -27,8 +29,8 @@ async function queryOpenAICompat(prompt, systemPrompt, history, { apiKey, baseUR
 }
 
 // Special handler for Sarvam (uses api-subscription-key header)
-async function querySarvam(prompt, systemPrompt, history, model) {
-  const apiKey = process.env.SARVAM_API_KEY;
+async function querySarvam(prompt, systemPrompt, history, model, opts = {}) {
+  const apiKey = opts.resolvedKey || process.env.SARVAM_API_KEY;
   if (!apiKey) throw new Error('SARVAM_API_KEY is not set.');
   const baseUrl = process.env.SARVAM_BASE_URL || 'https://api.sarvam.ai';
   const messages = [...(history || []), { role: 'user', content: prompt }];
@@ -46,7 +48,7 @@ async function querySarvam(prompt, systemPrompt, history, model) {
 const TARGETS = [
   // Sarvam AI
   { id: 'sarvam-m', provider: 'Sarvam AI', name: 'Sarvam-M', description: 'Multilingual model for Indian languages', requiresKey: 'SARVAM_API_KEY',
-    query: (p, s, h) => querySarvam(p, s, h, 'sarvam-m') },
+    query: (p, s, h, opts) => querySarvam(p, s, h, 'sarvam-m', opts) },
 
   // OpenAI
   { id: 'gpt-4o',        provider: 'OpenAI', name: 'GPT-4o',        description: 'Flagship multimodal model',   requiresKey: 'OPENAI_API_KEY',
@@ -96,10 +98,27 @@ function getTargets() {
   }));
 }
 
-function getTargetQuery(targetId, customOptions = {}) {
+// KEY_MAP: maps target requiresKey env var name → apiKeys object field name
+const KEY_MAP = {
+  SARVAM_API_KEY:    'sarvam',
+  OPENAI_API_KEY:    'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  GOOGLE_API_KEY:    'google',
+  GROQ_API_KEY:      'groq',
+};
+
+function getTargetQuery(targetId, customOptions = {}, apiKeys = {}) {
   const target = TARGETS.find(t => t.id === targetId);
   if (!target) throw new Error(`Unknown target: "${targetId}"`);
-  return (prompt, systemPrompt, history) => target.query(prompt, systemPrompt, history, customOptions);
+
+  // Build a merged options object: request-supplied key takes precedence over env
+  const mergedOptions = { ...customOptions };
+  if (target.requiresKey) {
+    const field = KEY_MAP[target.requiresKey];
+    if (field && apiKeys[field]) mergedOptions.resolvedKey = apiKeys[field];
+  }
+
+  return (prompt, systemPrompt, history) => target.query(prompt, systemPrompt, history, mergedOptions);
 }
 
 module.exports = { getTargets, getTargetQuery };

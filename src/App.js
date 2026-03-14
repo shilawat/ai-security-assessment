@@ -21,7 +21,7 @@ export default function App() {
     setSession(null);
     try {
       if (payload.type === 'escalation') {
-        const result = await api.runEscalation({ turns: payload.turns, goal: payload.goal });
+        const result = await api.runEscalation({ turns: payload.turns, goal: payload.goal, targetId: payload.targetId, customTarget: payload.customTarget, apiKeys: payload.apiKeys });
         setSingleResult(result);
       } else {
         const result = await api.runSingleAttack(payload);

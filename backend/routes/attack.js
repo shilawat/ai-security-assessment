@@ -44,7 +44,8 @@ router.post('/single', async (req, res) => {
     targetId = 'sarvam-m',
     refine = false,
     systemPrompt = null,
-    customTarget = {}
+    customTarget = {},
+    apiKeys = {}
   } = req.body;
 
   if (!strategyId || !goal) {
@@ -54,7 +55,7 @@ router.post('/single', async (req, res) => {
   if (!strategy) return res.status(404).json({ error: `Strategy "${strategyId}" not found.` });
 
   try {
-    const queryFn = getTargetQuery(targetId, customTarget);
+    const queryFn = getTargetQuery(targetId, customTarget, apiKeys);
     const { prompt, reasoning } = await generateAttackPrompt(strategy, goal, refine);
     const targetResult = await queryFn(prompt, systemPrompt, []);
     const judgment = await judgeResponse(goal, targetResult.response, prompt);
@@ -91,7 +92,8 @@ router.post('/session', async (req, res) => {
     usePAIR = false,
     maxIterations = 3,
     systemPrompt = null,
-    customTarget = {}
+    customTarget = {},
+    apiKeys = {}
   } = req.body;
 
   if (!goal) return res.status(400).json({ error: 'goal is required.' });
@@ -106,7 +108,7 @@ router.post('/session', async (req, res) => {
     strategies = getStrategies();
   }
 
-  const queryFn = getTargetQuery(targetId, customTarget);
+  const queryFn = getTargetQuery(targetId, customTarget, apiKeys);
   const sessionId = uuidv4();
   const results = [];
 
@@ -159,13 +161,13 @@ router.post('/session', async (req, res) => {
  * Body: { turns, goal, targetId?, customTarget? }
  */
 router.post('/escalation', async (req, res) => {
-  const { turns, goal, targetId = 'sarvam-m', customTarget = {} } = req.body;
+  const { turns, goal, targetId = 'sarvam-m', customTarget = {}, apiKeys = {} } = req.body;
   if (!turns || !Array.isArray(turns) || turns.length === 0) {
     return res.status(400).json({ error: 'turns array is required.' });
   }
 
   try {
-    const queryFn = getTargetQuery(targetId, customTarget);
+    const queryFn = getTargetQuery(targetId, customTarget, apiKeys);
     const history = [];
     const results = [];
 
